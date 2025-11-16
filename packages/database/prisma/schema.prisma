@@ -1,0 +1,599 @@
+// Prisma Schema for SatongPalTang Multi-tenant Real Estate SaaS
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// TENANT & SUBSCRIPTION
+// ============================================
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  domain    String?  @unique
+  plan      Plan     @default(BASIC)
+  status    TenantStatus @default(ACTIVE)
+
+  stripeCustomerId       String? @unique
+  stripeSubscriptionId   String? @unique
+  subscriptionStatus     SubscriptionStatus?
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+
+  maxUsers      Int @default(10)
+  maxProjects   Int @default(5)
+  maxStorage    Int @default(10240) // MB
+
+  metadata      Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  users         User[]
+  projects      Project[]
+  contracts     Contract[]
+  ledgers       Ledger[]
+  budgets       FinanceBudget[]
+  lands         Land[]
+  constructions Construction[]
+  investors     Investor[]
+  nfts          NFT[]
+  auditLogs     AuditLog[]
+
+  @@index([slug])
+  @@index([status])
+}
+
+enum Plan {
+  BASIC
+  PRO
+  ENTERPRISE
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELED
+  TRIAL
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+  TRIALING
+}
+
+// ============================================
+// USER & AUTHENTICATION
+// ============================================
+
+model User {
+  id       String @id @default(cuid())
+  tenantId String
+
+  email     String
+  password  String
+  name      String
+  phone     String?
+  avatar    String?
+
+  roleId    String
+  status    UserStatus @default(PENDING)
+
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret  String?
+
+  lastLoginAt DateTime?
+  metadata    Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role      Role   @relation(fields: [roleId], references: [id])
+
+  createdProjects   Project[]  @relation("ProjectCreator")
+  managedProjects   Project[]  @relation("ProjectManager")
+  contracts         Contract[] @relation("ContractSalesperson")
+  createdContracts  Contract[] @relation("ContractCreator")
+  auditLogs         AuditLog[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([email])
+  @@index([roleId])
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  TERMINATED
+}
+
+// ============================================
+// ROLE & PERMISSION (RBAC)
+// ============================================
+
+model Role {
+  id       String @id @default(cuid())
+  name     String
+  slug     String @unique
+  level    Int    // Hierarchy: 0=SYSTEM_ADMIN, 10=TENANT_ADMIN, 20=CM, 30=PM, 40=DIRECTOR, 50=MANAGER, 60=SALESPERSON, 70=CUSTOMER
+
+  permissions Json   // Casl-based permissions
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  users User[]
+
+  @@index([slug])
+  @@index([level])
+}
+
+// ============================================
+// PROJECT (현장)
+// ============================================
+
+model Project {
+  id       String @id @default(cuid())
+  tenantId String
+
+  name        String
+  code        String  // 현장코드
+  address     String
+  type        ProjectType
+  status      ProjectStatus @default(PLANNING)
+
+  // Building info
+  landArea        Decimal?  @db.Decimal(12, 2)
+  buildingArea    Decimal?  @db.Decimal(12, 2)
+  totalFloors     Int?
+  totalUnits      Int?
+
+  // Financial summary
+  totalBudget     Decimal?  @db.Decimal(15, 2)
+  totalExpense    Decimal?  @db.Decimal(15, 2)
+  totalRevenue    Decimal?  @db.Decimal(15, 2)
+
+  // Progress
+  constructionProgress Decimal? @db.Decimal(5, 2) // 0-100%
+  salesProgress        Decimal? @db.Decimal(5, 2) // 0-100%
+
+  startDate   DateTime?
+  endDate     DateTime?
+
+  createdById String
+  managerId   String?
+
+  metadata    Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant      Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy   User    @relation("ProjectCreator", fields: [createdById], references: [id])
+  manager     User?   @relation("ProjectManager", fields: [managerId], references: [id])
+
+  contracts       Contract[]
+  ledgers         Ledger[]
+  budgets         FinanceBudget[]
+  lands           Land[]
+  constructions   Construction[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([status])
+}
+
+enum ProjectType {
+  APARTMENT
+  OFFICETEL
+  COMMERCIAL
+  MIXED_USE
+  VILLA
+  SINGLE_HOUSE
+}
+
+enum ProjectStatus {
+  PLANNING
+  LAND_ACQUISITION
+  DESIGN
+  APPROVAL
+  CONSTRUCTION
+  SALES
+  COMPLETED
+  SUSPENDED
+}
+
+// ============================================
+// CONTRACT (계약)
+// ============================================
+
+model Contract {
+  id       String @id @default(cuid())
+  tenantId String
+  projectId String
+
+  contractNumber String
+
+  // Customer info
+  customerName    String
+  customerPhone   String
+  customerEmail   String?
+  customerAddress String?
+
+  // Unit info
+  unitNumber   String?
+  unitType     String?
+  unitArea     Decimal? @db.Decimal(10, 2)
+
+  // Financial
+  contractAmount      Decimal  @db.Decimal(15, 2)
+  downPayment         Decimal? @db.Decimal(15, 2)
+  middlePayment       Decimal? @db.Decimal(15, 2)
+  finalPayment        Decimal? @db.Decimal(15, 2)
+
+  // Commission
+  commissionRate      Decimal? @db.Decimal(5, 2)
+  commissionAmount    Decimal? @db.Decimal(15, 2)
+  commissionPaid      Boolean @default(false)
+
+  status      ContractStatus @default(DRAFT)
+
+  // E-signature
+  documentUrl         String?
+  signedDocumentUrl   String?
+  signedAt            DateTime?
+  recordingUrl        String?  // 녹취/녹화 URL
+
+  contractDate DateTime?
+
+  salespersonId String?
+  createdById   String
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant      Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project     Project @relation(fields: [projectId], references: [id])
+  salesperson User?   @relation("ContractSalesperson", fields: [salespersonId], references: [id])
+  createdBy   User    @relation("ContractCreator", fields: [createdById], references: [id])
+
+  @@unique([tenantId, contractNumber])
+  @@index([tenantId])
+  @@index([projectId])
+  @@index([status])
+}
+
+enum ContractStatus {
+  DRAFT
+  PENDING_SIGNATURE
+  SIGNED
+  COMPLETED
+  CANCELED
+}
+
+// ============================================
+// FINANCE - LEDGER (회계원장)
+// ============================================
+
+model Ledger {
+  id       String @id @default(cuid())
+  tenantId String
+  projectId String?
+
+  date        DateTime
+  type        LedgerType
+  category    String      // 계정과목
+  description String
+
+  debit       Decimal? @db.Decimal(15, 2)
+  credit      Decimal? @db.Decimal(15, 2)
+  amount      Decimal  @db.Decimal(15, 2)
+
+  receiptUrl  String?
+
+  budgetId    String?  // Link to budget item
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id])
+  budget  FinanceBudget? @relation(fields: [budgetId], references: [id])
+
+  @@index([tenantId])
+  @@index([projectId])
+  @@index([date])
+  @@index([type])
+}
+
+enum LedgerType {
+  INCOME
+  EXPENSE
+  ASSET
+  LIABILITY
+  EQUITY
+}
+
+// ============================================
+// FINANCE - BUDGET (수지표)
+// ============================================
+
+model FinanceBudget {
+  id       String @id @default(cuid())
+  tenantId String
+  projectId String?
+
+  category    String
+  subcategory String?
+
+  budgetAmount    Decimal @db.Decimal(15, 2)
+  confirmedAmount Decimal @db.Decimal(15, 2) @default(0)
+  expenseAmount   Decimal @db.Decimal(15, 2) @default(0)
+  remainingAmount Decimal @db.Decimal(15, 2) @default(0)
+
+  year    Int
+  quarter Int?
+  month   Int?
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id])
+  ledgers Ledger[]
+
+  @@index([tenantId])
+  @@index([projectId])
+  @@index([year, quarter, month])
+}
+
+// ============================================
+// LAND (토지)
+// ============================================
+
+model Land {
+  id       String @id @default(cuid())
+  tenantId String
+  projectId String?
+
+  // 지번
+  address         String
+  lotNumber       String
+  landType        String?  // 토지이용계획
+  zoning          String?  // 용도지역
+
+  // 면적
+  area            Decimal? @db.Decimal(12, 2)
+  officialPrice   Decimal? @db.Decimal(15, 2)
+
+  // 소유자
+  ownerName       String?
+  ownerPhone      String?
+  ownerAddress    String?
+
+  // 계약
+  contractStatus  LandContractStatus @default(PENDING)
+  contractAmount  Decimal? @db.Decimal(15, 2)
+  contractDate    DateTime?
+
+  // 동의서
+  consentStatus   Boolean @default(false)
+  consentDate     DateTime?
+  consentUrl      String?
+
+  // API 조회 데이터
+  apiData         Json?
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id])
+
+  @@index([tenantId])
+  @@index([projectId])
+  @@index([contractStatus])
+}
+
+enum LandContractStatus {
+  PENDING
+  NEGOTIATING
+  CONTRACTED
+  REGISTERED
+  COMPLETED
+}
+
+// ============================================
+// CONSTRUCTION (공정)
+// ============================================
+
+model Construction {
+  id       String @id @default(cuid())
+  tenantId String
+  projectId String
+
+  phase       String  // 공정단계: 기초, 골조, 마감 등
+  taskName    String
+
+  plannedStartDate  DateTime?
+  plannedEndDate    DateTime?
+  actualStartDate   DateTime?
+  actualEndDate     DateTime?
+
+  plannedProgress   Decimal? @db.Decimal(5, 2)
+  actualProgress    Decimal? @db.Decimal(5, 2)
+
+  status      ConstructionStatus @default(PLANNED)
+
+  contractor  String?
+  cost        Decimal? @db.Decimal(15, 2)
+
+  notes       String?
+  metadata    Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@index([tenantId])
+  @@index([projectId])
+  @@index([status])
+}
+
+enum ConstructionStatus {
+  PLANNED
+  IN_PROGRESS
+  DELAYED
+  COMPLETED
+  SUSPENDED
+}
+
+// ============================================
+// INVESTOR & NFT (리츠/투자자)
+// ============================================
+
+model Investor {
+  id       String @id @default(cuid())
+  tenantId String
+
+  name        String
+  email       String
+  phone       String?
+  walletAddress String? @unique
+
+  type        InvestorType @default(INDIVIDUAL)
+  status      InvestorStatus @default(ACTIVE)
+
+  totalInvested   Decimal @db.Decimal(15, 2) @default(0)
+  totalReturns    Decimal @db.Decimal(15, 2) @default(0)
+
+  kycStatus   Boolean @default(false)
+  kycDate     DateTime?
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  nfts   NFT[]
+
+  @@index([tenantId])
+  @@index([walletAddress])
+}
+
+enum InvestorType {
+  INDIVIDUAL
+  INSTITUTIONAL
+  CORPORATE
+}
+
+enum InvestorStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+model NFT {
+  id       String @id @default(cuid())
+  tenantId String
+
+  tokenId         String @unique
+  contractAddress String
+
+  investorId  String?
+
+  type        NFTType
+  name        String
+  description String?
+  imageUrl    String?
+
+  totalSupply     Int
+  availableSupply Int
+
+  pricePerToken   Decimal @db.Decimal(15, 2)
+
+  projectInfo     Json?  // Project details
+  metadata        Json?
+
+  mintedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  investor Investor? @relation(fields: [investorId], references: [id])
+
+  @@index([tenantId])
+  @@index([investorId])
+  @@index([tokenId])
+}
+
+enum NFTType {
+  FRACTIONAL
+  FULL_UNIT
+  GOVERNANCE
+}
+
+// ============================================
+// AUDIT LOG (감사로그)
+// ============================================
+
+model AuditLog {
+  id       String @id @default(cuid())
+  tenantId String
+
+  userId      String
+  action      String
+  resource    String
+  resourceId  String?
+
+  changes     Json?
+  ipAddress   String?
+  userAgent   String?
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([resource])
+  @@index([createdAt])
+}
