@@ -16,6 +16,9 @@ import { InvestorModule } from './investor/investor.module';
 import { AiModule } from './ai/ai.module';
 import { BillingModule } from './billing/billing.module';
 import { UploadModule } from './upload/upload.module';
+import { OrganizationModule } from './organization/organization.module';
+import { CommissionModule } from './commission/commission.module';
+import { TerminationModule } from './termination/termination.module';
 
 @Module({
   imports: [
@@ -42,6 +45,9 @@ import { UploadModule } from './upload/upload.module';
     AiModule,
     BillingModule,
     UploadModule,
+    OrganizationModule,
+    CommissionModule,
+    TerminationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

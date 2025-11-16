@@ -90,8 +90,17 @@ model User {
   roleId    String
   status    UserStatus @default(PENDING)
 
+  // Organization hierarchy
+  agencyId     String?
+  departmentId String?
+  teamId       String?
+
   twoFactorEnabled Boolean @default(false)
   twoFactorSecret  String?
+
+  // Termination
+  terminatedAt     DateTime?
+  terminationReason String?
 
   lastLoginAt DateTime?
   metadata    Json?
@@ -100,19 +109,27 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Relations
-  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  role      Role   @relation(fields: [roleId], references: [id])
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role       Role        @relation(fields: [roleId], references: [id])
+  agency     Agency?     @relation(fields: [agencyId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id])
+  team       Team?       @relation(fields: [teamId], references: [id])
 
-  createdProjects   Project[]  @relation("ProjectCreator")
-  managedProjects   Project[]  @relation("ProjectManager")
-  contracts         Contract[] @relation("ContractSalesperson")
-  createdContracts  Contract[] @relation("ContractCreator")
-  auditLogs         AuditLog[]
+  createdProjects     Project[]     @relation("ProjectCreator")
+  managedProjects     Project[]     @relation("ProjectManager")
+  contracts           Contract[]    @relation("ContractSalesperson")
+  createdContracts    Contract[]    @relation("ContractCreator")
+  commissions         Commission[]
+  terminationCerts    TerminationCertificate[]
+  auditLogs           AuditLog[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
   @@index([email])
   @@index([roleId])
+  @@index([agencyId])
+  @@index([departmentId])
+  @@index([teamId])
 }
 
 enum UserStatus {
@@ -142,6 +159,197 @@ model Role {
 
   @@index([slug])
   @@index([level])
+}
+
+// ============================================
+// ORGANIZATION HIERARCHY (분양조직)
+// ============================================
+
+// 대행사 (1차 대행사)
+model Agency {
+  id       String @id @default(cuid())
+  tenantId String
+
+  name        String
+  code        String  @unique
+  type        AgencyType @default(PRIMARY)
+
+  parentAgencyId String?  // 2차 대행사의 경우 1차 대행사 ID
+
+  contactName  String?
+  contactPhone String?
+  contactEmail String?
+
+  commissionRate Decimal? @db.Decimal(5, 2)  // 대행사 수수료율
+
+  status      OrgStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  parentAgency Agency?      @relation("AgencyHierarchy", fields: [parentAgencyId], references: [id])
+  subAgencies  Agency[]     @relation("AgencyHierarchy")
+  departments  Department[]
+  users        User[]
+
+  @@index([tenantId])
+  @@index([parentAgencyId])
+}
+
+enum AgencyType {
+  PRIMARY    // 1차 대행사
+  SECONDARY  // 2차 대행사
+}
+
+// 본부
+model Department {
+  id       String @id @default(cuid())
+  tenantId String
+  agencyId String
+
+  name String
+  code String
+
+  managerName  String?
+  managerPhone String?
+
+  status OrgStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  agency Agency @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  teams  Team[]
+  users  User[]
+
+  @@unique([agencyId, code])
+  @@index([tenantId])
+  @@index([agencyId])
+}
+
+// 팀
+model Team {
+  id           String @id @default(cuid())
+  tenantId     String
+  departmentId String
+
+  name String
+  code String
+
+  leaderName  String?
+  leaderPhone String?
+
+  status OrgStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  users      User[]
+
+  @@unique([departmentId, code])
+  @@index([tenantId])
+  @@index([departmentId])
+}
+
+enum OrgStatus {
+  ACTIVE
+  INACTIVE
+  DISSOLVED
+}
+
+// ============================================
+// COMMISSION MANAGEMENT (수수료 관리)
+// ============================================
+
+model Commission {
+  id         String @id @default(cuid())
+  tenantId   String
+  contractId String
+  userId     String  // 상담사/팀원
+
+  agencyId     String?
+  departmentId String?
+  teamId       String?
+
+  type   CommissionType
+  rate   Decimal @db.Decimal(5, 2)
+  amount Decimal @db.Decimal(15, 2)
+
+  status CommissionStatus @default(PENDING)
+
+  paidAt   DateTime?
+  paidBy   String?
+  notes    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  contract Contract @relation(fields: [contractId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([contractId])
+  @@index([userId])
+  @@index([agencyId])
+  @@index([departmentId])
+  @@index([teamId])
+}
+
+enum CommissionType {
+  SALES        // 판매수수료
+  AGENCY       // 대행사수수료
+  DEPARTMENT   // 본부수수료
+  TEAM         // 팀수수료
+  REFERRAL     // 소개수수료
+}
+
+enum CommissionStatus {
+  PENDING
+  APPROVED
+  PAID
+  REJECTED
+}
+
+// ============================================
+// TERMINATION CERTIFICATE (해촉증명서)
+// ============================================
+
+model TerminationCertificate {
+  id       String @id @default(cuid())
+  tenantId String
+  userId   String
+
+  certificateNumber String @unique
+
+  agencyName     String?
+  departmentName String?
+  teamName       String?
+
+  startDate      DateTime
+  endDate        DateTime
+  terminationDate DateTime
+
+  reason         String
+  totalContracts Int
+  totalAmount    Decimal @db.Decimal(15, 2)
+
+  issuedBy   String
+  issuedAt   DateTime @default(now())
+
+  documentUrl String?  // PDF URL
+
+  metadata Json?
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([userId])
 }
 
 // ============================================
@@ -272,10 +480,11 @@ model Contract {
   updatedAt DateTime @updatedAt
 
   // Relations
-  tenant      Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  project     Project @relation(fields: [projectId], references: [id])
-  salesperson User?   @relation("ContractSalesperson", fields: [salespersonId], references: [id])
-  createdBy   User    @relation("ContractCreator", fields: [createdById], references: [id])
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project     Project      @relation(fields: [projectId], references: [id])
+  salesperson User?        @relation("ContractSalesperson", fields: [salespersonId], references: [id])
+  createdBy   User         @relation("ContractCreator", fields: [createdById], references: [id])
+  commissions Commission[]
 
   @@unique([tenantId, contractNumber])
   @@index([tenantId])
@@ -385,8 +594,22 @@ model Land {
   // 지번
   address         String
   lotNumber       String
-  landType        String?  // 토지이용계획
-  zoning          String?  // 용도지역
+  pnu             String?  // 필지고유번호 (19자리)
+
+  // 토지이용계획 (토지이음 API)
+  landType        String?  // 지목
+  zoning          String?  // 용도지역 (예: 제1종일반주거지역)
+  landUseDistrict String?  // 용도지구
+  landUseSituation String? // 토지이용상황
+
+  // 건축 관련
+  buildingCoverageRatio Decimal? @db.Decimal(5, 2)  // 건폐율
+  floorAreaRatio        Decimal? @db.Decimal(5, 2)  // 용적률
+  heightLimit           String?                      // 높이제한
+  buildingPossible      Json?                        // 건축가능항목 배열
+
+  // 지구단위계획
+  districtPlan          String?
 
   // 면적
   area            Decimal? @db.Decimal(12, 2)
@@ -407,8 +630,9 @@ model Land {
   consentDate     DateTime?
   consentUrl      String?
 
-  // API 조회 데이터
+  // API 조회 데이터 (토지이음 전체 응답)
   apiData         Json?
+  apiLastFetched  DateTime?
 
   metadata Json?
 
@@ -422,6 +646,7 @@ model Land {
   @@index([tenantId])
   @@index([projectId])
   @@index([contractStatus])
+  @@index([pnu])
 }
 
 enum LandContractStatus {

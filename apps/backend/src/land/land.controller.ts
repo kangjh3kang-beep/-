@@ -40,4 +40,19 @@ export class LandController {
   delete(@Param('id') id: string) {
     return this.landService.delete(id);
   }
+
+  @Post(':id/fetch-info')
+  @ApiOperation({ summary: 'Fetch land information from 토지이음 API' })
+  async fetchLandInfo(@Param('id') id: string, @CurrentTenant() tenantId: string) {
+    return this.landService.fetchLandInfo(id, tenantId);
+  }
+
+  @Post('bulk')
+  @ApiOperation({ summary: 'Bulk create land entries with optional API data fetch' })
+  async bulkCreate(
+    @CurrentTenant() tenantId: string,
+    @Body() data: { projectId: string; lands: any[]; fetchApiData?: boolean }
+  ) {
+    return this.landService.bulkCreate(tenantId, data.projectId, data.lands, data.fetchApiData);
+  }
 }
