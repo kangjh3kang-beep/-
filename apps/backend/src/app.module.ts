@@ -15,6 +15,7 @@ import { ConstructionModule } from './construction/construction.module';
 import { InvestorModule } from './investor/investor.module';
 import { AiModule } from './ai/ai.module';
 import { BillingModule } from './billing/billing.module';
+import { UploadModule } from './upload/upload.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { BillingModule } from './billing/billing.module';
     InvestorModule,
     AiModule,
     BillingModule,
+    UploadModule,
   ],
   controllers: [AppController],
   providers: [AppService],

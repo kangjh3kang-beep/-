@@ -19,9 +19,41 @@ export class ContractController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all contracts' })
-  findAll(@CurrentTenant() tenantId: string, @Query('projectId') projectId?: string) {
-    return this.contractService.findAll(tenantId, projectId);
+  @ApiOperation({ summary: 'Get all contracts with filters' })
+  findAll(
+    @CurrentTenant() tenantId: string,
+    @Query('projectId') projectId?: string,
+    @Query('status') status?: string,
+    @Query('salespersonId') salespersonId?: string,
+    @Query('search') search?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.contractService.findAll(tenantId, {
+      projectId,
+      status,
+      salespersonId,
+      search,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+    });
+  }
+
+  @Get('statistics/summary')
+  @ApiOperation({ summary: 'Get contract statistics' })
+  getStatistics(@CurrentTenant() tenantId: string, @Query('projectId') projectId?: string) {
+    return this.contractService.getStatistics(tenantId, projectId);
+  }
+
+  @Get('statistics/monthly')
+  @ApiOperation({ summary: 'Get contracts by month' })
+  getContractsByMonth(
+    @CurrentTenant() tenantId: string,
+    @Query('year') year?: string,
+    @Query('projectId') projectId?: string,
+  ) {
+    const currentYear = year ? parseInt(year) : new Date().getFullYear();
+    return this.contractService.getContractsByMonth(tenantId, currentYear, projectId);
   }
 
   @Get(':id')
@@ -40,5 +72,20 @@ export class ContractController {
   @ApiOperation({ summary: 'Update contract status' })
   updateStatus(@Param('id') id: string, @Body('status') status: string) {
     return this.contractService.updateStatus(id, status);
+  }
+
+  @Patch(':id/document')
+  @ApiOperation({ summary: 'Upload contract document' })
+  uploadDocument(@Param('id') id: string, @Body('documentUrl') documentUrl: string) {
+    return this.contractService.uploadDocument(id, documentUrl);
+  }
+
+  @Post(':id/sign')
+  @ApiOperation({ summary: 'Sign contract' })
+  signContract(
+    @Param('id') id: string,
+    @Body() signData: { signedDocumentUrl: string; recordingUrl?: string },
+  ) {
+    return this.contractService.signContract(id, signData.signedDocumentUrl, signData.recordingUrl);
   }
 }
