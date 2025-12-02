@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "differential-measurement-sdk"
+version = "1.0.0"
+description = "차동측정 기반 범용분석시스템 SDK (Differential Measurement Analysis SDK)"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+authors = [
+    {name = "Differential Measurement SDK Team"}
+]
+keywords = [
+    "differential measurement",
+    "signal processing",
+    "data analysis",
+    "spectrum analysis",
+    "noise filtering",
+    "calibration"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+    "numpy>=1.20.0",
+]
+
+[project.optional-dependencies]
+visualization = [
+    "matplotlib>=3.3.0",
+]
+full = [
+    "matplotlib>=3.3.0",
+    "scipy>=1.6.0",
+    "h5py>=3.0.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.0.0",
+    "mypy>=1.0.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/differential-measurement-sdk"
+"Documentation" = "https://github.com/differential-measurement-sdk/docs"
+"Bug Tracker" = "https://github.com/differential-measurement-sdk/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["differential_measurement_sdk*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+addopts = "-v --tb=short"
