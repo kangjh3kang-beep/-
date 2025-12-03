@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "differential-measurement-sdk"
-version = "1.0.0"
-description = "차동측정 기반 범용분석시스템 SDK (Differential Measurement Analysis SDK)"
+version = "71.0.0"
+description = "차동측정 기반 범용분석시스템 SDK v71 - 휴대형 카트리지 및 비표적 역설계분석시스템 포함"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.8"
@@ -18,7 +18,17 @@ keywords = [
     "data analysis",
     "spectrum analysis",
     "noise filtering",
-    "calibration"
+    "calibration",
+    "portable cartridge",
+    "non-targeted analysis",
+    "cross-reactive sensor",
+    "fingerprint analysis",
+    "anomaly detection",
+    "phase-variable interface",
+    "gas sampling",
+    "ion wind",
+    "multi-path calibration",
+    "RAFE"
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

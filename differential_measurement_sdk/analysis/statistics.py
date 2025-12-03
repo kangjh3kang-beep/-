@@ -219,7 +219,7 @@ class StatisticalAnalyzer:
         type_a = std / np.sqrt(n)
 
         # 커버리지 인자 (정규분포 가정)
-        from scipy import stats if False else None  # scipy 없이 근사값 사용
+        # scipy 없이 근사값 사용
 
         # t 분포 근사 (자유도가 충분히 크면 z 값에 수렴)
         if n > 30:
